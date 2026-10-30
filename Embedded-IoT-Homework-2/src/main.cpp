@@ -1,53 +1,110 @@
 #include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
-// ---- Pins ----
-const int LED1_PIN = 18;
-const int LED2_PIN = 19;
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_SDA 21
+#define OLED_SCL 22
+#define OLED_ADDR 0x3C
 
-// ---- LEDC channels ----
-// ESP32 mein channel pairs timer share karte hain (0,1 -> timer0, 2,3 -> timer1),
-// isliye alag frequencies ke liye channel 0 aur 2 use kiye hain.
-const int LED1_CH = 0;
-const int LED2_CH = 2;
+#define LED1_PIN 18
+#define LED2_PIN 19
 
-// ---- PWM settings ----
-const uint32_t LED1_FREQ = 1000;   // Hz
-const uint32_t LED2_FREQ = 5000;   // Hz
-const uint8_t  PWM_RES   = 10;     // bits -> duty 0..1023
-const int      MAX_DUTY  = (1 << PWM_RES) - 1;
+#define LED1_CH 0
+#define LED2_CH 2
+#define LED1_FREQ 1000
+#define LED2_FREQ 5000
+#define PWM_RES 8
+#define MAX_DUTY 255
 
-// ---- Duty values (Task 2 mein OLED par yehi dikhayenge) ----
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
 int duty1 = 0;
-int duty2 = MAX_DUTY;
+int duty2 = 0;
+int step1 = 2;
+int step2 = 3;
+unsigned long lastDisplay = 0;
 
-int step1 = 5;
-int step2 = -5;
+int toPercent(int duty) {
+  return duty * 100 / MAX_DUTY;
+}
+
+void fadeStep(int &duty, int &step) {
+  duty = duty + step;
+  if (duty >= MAX_DUTY) {
+    duty = MAX_DUTY;
+    step = -step;
+  }
+  if (duty <= 0) {
+    duty = 0;
+    step = -step;
+  }
+}
+
+void updateDisplay() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setCursor(0, 0);
+  display.println("PWM MONITOR");
+  display.drawLine(0, 12, 127, 12, SSD1306_WHITE);
+
+  display.setCursor(0, 24);
+  display.print("LED1: ");
+  display.print(toPercent(duty1));
+  display.print("% F:");
+  display.print(LED1_FREQ);
+  display.println("Hz");
+
+  display.setCursor(0, 40);
+  display.print("LED2: ");
+  display.print(toPercent(duty2));
+  display.print("% F:");
+  display.print(LED2_FREQ);
+  display.println("Hz");
+
+  display.display();
+}
 
 void setup() {
   Serial.begin(115200);
 
+  Wire.begin(OLED_SDA, OLED_SCL);
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+    Serial.println("OLED initialization failed!");
+    while (true) {
+      delay(100);
+    }
+  }
+
   ledcSetup(LED1_CH, LED1_FREQ, PWM_RES);
   ledcAttachPin(LED1_PIN, LED1_CH);
-
   ledcSetup(LED2_CH, LED2_FREQ, PWM_RES);
   ledcAttachPin(LED2_PIN, LED2_CH);
+
+  updateDisplay();
 }
 
 void loop() {
-  duty1 += step1;
-  if (duty1 >= MAX_DUTY) { duty1 = MAX_DUTY; step1 = -step1; }
-  if (duty1 <= 0)        { duty1 = 0;        step1 = -step1; }
-
-  duty2 += step2;
-  if (duty2 >= MAX_DUTY) { duty2 = MAX_DUTY; step2 = -step2; }
-  if (duty2 <= 0)        { duty2 = 0;        step2 = -step2; }
+  fadeStep(duty1, step1);
+  fadeStep(duty2, step2);
 
   ledcWrite(LED1_CH, duty1);
   ledcWrite(LED2_CH, duty2);
 
-  Serial.printf("LED1: %d%% (%luHz)  LED2: %d%% (%luHz)\n",
-                duty1 * 100 / MAX_DUTY, (unsigned long)LED1_FREQ,
-                duty2 * 100 / MAX_DUTY, (unsigned long)LED2_FREQ);
+  if (millis() - lastDisplay >= 100) {
+    lastDisplay = millis();
+    updateDisplay();
 
-  delay(10);
+    Serial.print("LED1: ");
+    Serial.print(toPercent(duty1));
+    Serial.print("% (1000 Hz)  LED2: ");
+    Serial.print(toPercent(duty2));
+    Serial.println("% (5000 Hz)");
+  }
+
+  delay(15);
 }
