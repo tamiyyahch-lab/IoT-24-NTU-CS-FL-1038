@@ -2,23 +2,25 @@
 
 #define DAC_PIN 25  // DAC1
 
-const int levels[] = {0, 64, 128, 192, 255};
-const int numLevels = sizeof(levels) / sizeof(levels[0]);
+const int FADE_DELAY = 20;  // ms (Task 4 mein isko 5 aur 50 karna hai)
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Program 1: Stepped DAC Output on GPIO25");
+  Serial.println("Program 2: DAC Fade on GPIO25");
 }
 
 void loop() {
-  for (int i = 0; i < numLevels; i++) {
-    dacWrite(DAC_PIN, levels[i]);
-    Serial.print("DAC value: ");
-    Serial.print(levels[i]);
-    Serial.print("  -> approx voltage: ");
-    Serial.print(levels[i] * 3.3 / 255.0, 2);
-    Serial.println(" V");
-    delay(2000);  
+  // Fade UP: 0 -> 255
+  for (int value = 0; value <= 255; value++) {
+    dacWrite(DAC_PIN, value);
+    delay(FADE_DELAY);
   }
-  Serial.println("---- cycle done ----");
+  Serial.println("Fade UP done");
+
+  // Fade DOWN: 255 -> 0
+  for (int value = 255; value >= 0; value--) {
+    dacWrite(DAC_PIN, value);
+    delay(FADE_DELAY);
+  }
+  Serial.println("Fade DOWN done");
 }
